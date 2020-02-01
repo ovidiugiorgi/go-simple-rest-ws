@@ -22,9 +22,8 @@ func NewProductController(service model.ProductService) *ProductController {
 }
 
 func (c *ProductController) CreateProduct(w http.ResponseWriter, r *http.Request) error {
-	decoder := json.NewDecoder(r.Body)
 	var p = new(model.Product)
-	err := decoder.Decode(p)
+	err := json.NewDecoder(r.Body).Decode(p)
 	if err != nil {
 		return err
 	}
@@ -33,11 +32,7 @@ func (c *ProductController) CreateProduct(w http.ResponseWriter, r *http.Request
 		return err
 	}
 	w.WriteHeader(http.StatusCreated)
-	js, err := json.Marshal(p)
-	if err != nil {
-		return errors.New("corrupted data")
-	}
-	_, err = w.Write(js)
+	err = json.NewEncoder(w).Encode(p)
 	return err
 }
 
@@ -63,15 +58,11 @@ func (c *ProductController) GetProduct(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return fmt.Errorf("invalid productID: %v", err.Error())
 	}
-	product, err := c.service.Get(productID)
+	p, err := c.service.Get(productID)
 	if err != nil {
 		return errors.New("product not found")
 	}
-	js, err := json.Marshal(product)
-	if err != nil {
-		return errors.New("corrupted data")
-	}
-	_, err = w.Write(js)
+	err = json.NewEncoder(w).Encode(p)
 	return err
 }
 
