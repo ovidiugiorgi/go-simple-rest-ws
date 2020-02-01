@@ -11,7 +11,7 @@ import (
 
 const (
 	counterKeyName = "product-counter"
-	queryWorkers   = 1
+	queryWorkers   = 10
 )
 
 type RedisStore struct {
