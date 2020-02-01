@@ -63,17 +63,36 @@ func (s *RedisStore) Get(productID int64) (*model.Product, error) {
 
 func (s *RedisStore) GetAll() ([]model.Product, error) {
 	count := s.getID()
-	products := make([]model.Product, 0, count)
-	var i int64
-	// TODO: Use goroutines
-	for i = 1; i <= count; i++ {
-		p, err := s.Get(i)
-		if err != nil {
-			continue
+	pChan := make(chan *model.Product, count)
+	listChan := make(chan []model.Product)
+
+	go func(out chan<- []model.Product) {
+		products := make([]model.Product, 0, count)
+		var i int64
+		for i = 1; i <= count; i++ {
+			p := <-pChan
+			if p == nil {
+				continue
+			}
+			products = append(products, *p)
 		}
-		products = append(products, *p)
+		listChan <- products
+		close(listChan)
+	}(listChan)
+
+	var i int64
+	for i = 1; i <= count; i++ {
+		go func(ID int64) {
+			p, err := s.Get(ID)
+			if err != nil {
+				pChan <- nil
+			} else {
+				pChan <- p
+			}
+		}(i)
 	}
-	return products, nil
+
+	return <-listChan, nil
 }
 
 func (s *RedisStore) Remove(productID int64) error {
