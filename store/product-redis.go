@@ -87,6 +87,7 @@ func (s *RedisStore) Remove(productID int64) error {
 	return nil
 }
 
+// TODO: Use HSET
 func (s *RedisStore) getNextID() (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

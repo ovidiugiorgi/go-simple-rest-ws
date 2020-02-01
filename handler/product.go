@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/ovidiugiorgi/wsproduct/model"
+	"github.com/ovidiugiorgi/wsproduct/util"
 )
 
 type ProductController struct {
@@ -77,5 +78,15 @@ func (c *ProductController) RemoveProduct(w http.ResponseWriter, r *http.Request
 		return fmt.Errorf("could not remove product: %v", err.Error())
 	}
 	w.WriteHeader(http.StatusOK)
+	return err
+}
+
+func (c *ProductController) CreateDefault(w http.ResponseWriter, r *http.Request) error {
+	p, err := c.service.Add(util.RandStringRunes(10), util.RandStringRunes(10), util.RandStringRunes(10))
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusCreated)
+	err = json.NewEncoder(w).Encode(p)
 	return err
 }

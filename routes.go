@@ -28,4 +28,5 @@ func registerProductRoutes(r *mux.Router, c *handler.ProductController) {
 	s.HandleFunc("", createHandler(c.ListProducts)).Methods("GET")
 	s.HandleFunc("/{productID}", createHandler(c.GetProduct)).Methods("GET")
 	s.HandleFunc("/{productID}", createHandler(c.RemoveProduct)).Methods("DELETE")
+	r.HandleFunc("/test/products/create-default", createHandler(c.CreateDefault)).Methods("GET")
 }
