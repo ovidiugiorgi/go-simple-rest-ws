@@ -9,7 +9,10 @@ import (
 	"github.com/ovidiugiorgi/wsproduct/model"
 )
 
-const ID_KEY = "product-counter"
+const (
+	counterKeyName = "product-counter"
+	queryWorkers   = 1
+)
 
 type RedisStore struct {
 	mu    sync.RWMutex
@@ -61,38 +64,60 @@ func (s *RedisStore) Get(productID int64) (*model.Product, error) {
 	return p, nil
 }
 
+func (s *RedisStore) getProductWorker(in <-chan int64, out chan<- *model.Product) {
+	for {
+		ID, ok := <-in
+		if !ok {
+			return
+		}
+		p, err := s.Get(ID)
+		switch err {
+		case nil:
+			out <- p
+		default:
+			out <- nil
+		}
+	}
+}
+
+func aggregateProducts(count int64, in <-chan *model.Product, out chan<- []model.Product) {
+	products := make([]model.Product, 0)
+	var i int64
+	for i = 0; i < count; i++ {
+		p, ok := <-in
+		if p == nil {
+			continue
+		}
+		if !ok {
+			break
+		}
+		products = append(products, *p)
+	}
+	out <- products
+	close(out)
+}
+
+func enqueueProducts(length int64, tasks chan<- int64) {
+	var i int64
+	for i = 1; i <= length; i++ {
+		tasks <- i
+	}
+	close(tasks)
+}
+
 func (s *RedisStore) GetAll() ([]model.Product, error) {
 	count := s.getID()
-	pChan := make(chan *model.Product, count)
-	listChan := make(chan []model.Product)
+	pending := make(chan int64, count)
+	complete := make(chan *model.Product, count)
+	list := make(chan []model.Product)
 
-	go func(out chan<- []model.Product) {
-		products := make([]model.Product, 0, count)
-		var i int64
-		for i = 1; i <= count; i++ {
-			p := <-pChan
-			if p == nil {
-				continue
-			}
-			products = append(products, *p)
-		}
-		listChan <- products
-		close(listChan)
-	}(listChan)
-
-	var i int64
-	for i = 1; i <= count; i++ {
-		go func(ID int64) {
-			p, err := s.Get(ID)
-			if err != nil {
-				pChan <- nil
-			} else {
-				pChan <- p
-			}
-		}(i)
+	enqueueProducts(count, pending)
+	for i := 0; i < queryWorkers; i++ {
+		go s.getProductWorker(pending, complete)
 	}
+	go aggregateProducts(count, complete, list)
 
-	return <-listChan, nil
+	return <-list, nil
 }
 
 func (s *RedisStore) Remove(productID int64) error {
@@ -110,7 +135,7 @@ func (s *RedisStore) Remove(productID int64) error {
 func (s *RedisStore) getNextID() (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id, err := s.redis.Client().Incr(ID_KEY).Result()
+	id, err := s.redis.Client().Incr(counterKeyName).Result()
 	if err != nil {
 		return 0, errors.New("could not generate ID")
 	}
@@ -120,7 +145,7 @@ func (s *RedisStore) getNextID() (int64, error) {
 func (s *RedisStore) getID() int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	stringID, err := s.redis.Client().Get(ID_KEY).Result()
+	stringID, err := s.redis.Client().Get(counterKeyName).Result()
 	if err != nil {
 		return 0
 	}
