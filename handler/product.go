@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"errors"
+
 	"github.com/gorilla/mux"
 	"github.com/ovidiugiorgi/wsproduct/model"
 )
@@ -58,7 +59,7 @@ func (c *ProductController) GetProduct(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return fmt.Errorf("invalid productID: %v", err.Error())
 	}
-	p, err := c.service.Get(productID)
+	p, err := c.service.Get(int64(productID))
 	if err != nil {
 		return errors.New("product not found")
 	}
@@ -71,7 +72,7 @@ func (c *ProductController) RemoveProduct(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return fmt.Errorf("invalid productID: %v", err.Error())
 	}
-	err = c.service.Remove(productID)
+	err = c.service.Remove(int64(productID))
 	if err != nil {
 		return fmt.Errorf("could not remove product: %v", err.Error())
 	}

@@ -1,18 +1,18 @@
 package main
 
 import (
-	"github.com/gorilla/mux"
-	"github.com/ovidiugiorgi/wsproduct/handler"
-	"github.com/ovidiugiorgi/wsproduct/model"
 	"log"
 	"net/http"
+
+	"github.com/gorilla/mux"
+	"github.com/ovidiugiorgi/wsproduct/handler"
 )
 
 func createHandler(fn func(http.ResponseWriter, *http.Request) error) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := fn(w, r)
 		if err != nil {
-			log.Println(err.Error())
+			log.Printf("error: %v\n", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			_, err = w.Write([]byte(err.Error()))
 			if err != nil {
@@ -22,9 +22,7 @@ func createHandler(fn func(http.ResponseWriter, *http.Request) error) func(http.
 	}
 }
 
-func registerProductRoutes(r *mux.Router) {
-	var c = handler.NewProductController(model.NewProductStore())
-
+func registerProductRoutes(r *mux.Router, c *handler.ProductController) {
 	s := r.PathPrefix("/products").Subrouter()
 	s.HandleFunc("", createHandler(c.CreateProduct)).Methods("POST")
 	s.HandleFunc("", createHandler(c.ListProducts)).Methods("GET")
