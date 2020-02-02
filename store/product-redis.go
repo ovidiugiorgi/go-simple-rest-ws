@@ -64,7 +64,7 @@ func (s *RedisStore) Get(productID int64) (*model.Product, error) {
 	return p, nil
 }
 
-func (s *RedisStore) getProductWorker(in <-chan int64, out chan<- *model.Product) {
+func (s *RedisStore) startQueryWorker(in <-chan int64, out chan<- *model.Product) {
 	for {
 		ID, ok := <-in
 		if !ok {
@@ -80,7 +80,7 @@ func (s *RedisStore) getProductWorker(in <-chan int64, out chan<- *model.Product
 	}
 }
 
-func aggregateProducts(count int64, in <-chan *model.Product, out chan<- []model.Product) {
+func aggregateProducts(count int64, in <-chan *model.Product) []model.Product {
 	products := make([]model.Product, 0)
 	var i int64
 	for i = 0; i < count; i++ {
@@ -93,11 +93,10 @@ func aggregateProducts(count int64, in <-chan *model.Product, out chan<- []model
 		}
 		products = append(products, *p)
 	}
-	out <- products
-	close(out)
+	return products
 }
 
-func enqueueProducts(length int64, tasks chan<- int64) {
+func enqueueQueries(length int64, tasks chan<- int64) {
 	var i int64
 	for i = 1; i <= length; i++ {
 		tasks <- i
@@ -107,17 +106,14 @@ func enqueueProducts(length int64, tasks chan<- int64) {
 
 func (s *RedisStore) GetAll() ([]model.Product, error) {
 	count := s.getID()
-	pending := make(chan int64, count)
-	complete := make(chan *model.Product, count)
-	list := make(chan []model.Product)
+	tasks := make(chan int64, count)
+	pChan := make(chan *model.Product, count)
 
-	enqueueProducts(count, pending)
+	go enqueueQueries(count, tasks)
 	for i := 0; i < queryWorkers; i++ {
-		go s.getProductWorker(pending, complete)
+		go s.startQueryWorker(tasks, pChan)
 	}
-	go aggregateProducts(count, complete, list)
-
-	return <-list, nil
+	return aggregateProducts(count, pChan), nil
 }
 
 func (s *RedisStore) Remove(productID int64) error {
