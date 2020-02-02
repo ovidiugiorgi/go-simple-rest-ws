@@ -64,33 +64,24 @@ func (s *RedisStore) Get(productID int64) (*model.Product, error) {
 	return p, nil
 }
 
-func (s *RedisStore) startQueryWorker(in <-chan int64, out chan<- *model.Product) {
-	for {
-		ID, ok := <-in
-		if !ok {
-			return
-		}
+func (s *RedisStore) startQueryWorker(
+	queryChan <-chan int64,
+	pChan chan<- *model.Product,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	for ID := range queryChan {
 		p, err := s.Get(ID)
-		switch err {
-		case nil:
-			out <- p
-		default:
-			out <- nil
+		if err != nil {
+			continue
 		}
+		pChan <- p
 	}
 }
 
-func aggregateProducts(count int64, in <-chan *model.Product) []model.Product {
+func aggregateProducts(in <-chan *model.Product) []model.Product {
 	products := make([]model.Product, 0)
-	var i int64
-	for i = 0; i < count; i++ {
-		p, ok := <-in
-		if p == nil {
-			continue
-		}
-		if !ok {
-			break
-		}
+	for p := range in {
 		products = append(products, *p)
 	}
 	return products
@@ -106,14 +97,18 @@ func enqueueQueries(length int64, tasks chan<- int64) {
 
 func (s *RedisStore) GetAll() ([]model.Product, error) {
 	count := s.getID()
-	tasks := make(chan int64, count)
-	pChan := make(chan *model.Product, count)
+	queryChan := make(chan int64, count)
+	productChan := make(chan *model.Product, count)
 
-	go enqueueQueries(count, tasks)
+	var wg sync.WaitGroup
+	go enqueueQueries(count, queryChan)
 	for i := 0; i < queryWorkers; i++ {
-		go s.startQueryWorker(tasks, pChan)
+		wg.Add(1)
+		go s.startQueryWorker(queryChan, productChan, &wg)
 	}
-	return aggregateProducts(count, pChan), nil
+	wg.Wait()
+	close(productChan)
+	return aggregateProducts(productChan), nil
 }
 
 func (s *RedisStore) Remove(productID int64) error {
